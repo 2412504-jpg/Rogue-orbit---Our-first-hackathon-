@@ -8,7 +8,7 @@ const gl=new Proxy({ARRAY_BUFFER:1,STATIC_DRAW:2,FLOAT:3,TRIANGLES:4,COMPILE_STA
  uniformMatrix4fv:(name,_,a)=>{if(name==='model')model=Array.from(a);},uniform3fv:(name,a)=>{if(name==='color')color=Array.from(a);},
  drawArrays:()=>draws.push({vertices:attribs.position.data,normals:attribs.normal.data,matrix:model,color,group:context.window.drawGroup||'Architecture'})
 },{get:(o,k)=>k in o?o[k]:()=>{}});
-function element(id){if(!elements.has(id))elements.set(id,{style:{},dataset:{},classList:{add(){},remove(){},toggle(){}},textContent:'',innerHTML:'',open:false,addEventListener(){},querySelector:element,append(){},focus(){},showModal(){this.open=true},close(){this.open=false},getContext:()=>id==='#world'?gl:null,play:()=>Promise.resolve(),pause(){}});return elements.get(id);}
+function element(id){if(!elements.has(id))elements.set(id,{style:{},dataset:{},classList:{add(){},remove(){},toggle(){}},textContent:'',innerHTML:'',open:false,addEventListener(){},setAttribute(){},querySelector:element,append(){},focus(){},showModal(){this.open=true},close(){this.open=false},getContext:()=>id==='#world'?gl:null,play:()=>Promise.resolve(),pause(){}});return elements.get(id);}
 const context={console,Math,JSON,Map,Set,Float32Array,parseInt,Number,String,Array,Error,Infinity,URLSearchParams,location:{search:''},
  document:{body:{classList:{toggle(){},add(){},remove(){}}},querySelector:element,querySelectorAll:()=>[],createElement:()=>element('generated'+elements.size)},window:{addEventListener(){}},
  matchMedia:()=>({matches:false}),performance:{now:()=>0},localStorage:{getItem:()=>null,setItem(){}},
@@ -21,7 +21,24 @@ vm.runInContext(code,context);
 const t=context.window.test;
 assert(t.getMenu());assert(element('#start-screen').open,'Start screen opens before gameplay');
 t.enterGame();assert(!t.getMenu());assert(!element('#start-screen').open);
+assert(element('#panel').open,'Ayla greets first-time players');
+assert.match(element('#panel-content').innerHTML,/Welcome! I’m Ayla/);
+t.transition('guide-1');
+assert.match(element('#panel-content').innerHTML,/W, A, S and D keys/);
+t.transition('guide-2');
+assert.match(element('#panel-content').innerHTML,/Walk to Ayla/);
+t.transition('guide-route');
+assert(!element('#panel').open,'Auto-walk closes the guide');
+assert(t.getPath().length>0,'The guide routes the player to the briefing office');
+for(let time=16;time<=8000&&!element('#panel').open;time+=16){t.loop(time);draws.length=0;}
+assert(element('#panel').open,'The briefing begins when the player reaches Ayla');
+assert.match(element('#panel-content').innerHTML,/Open the flood map/);
+t.transition('close');
 t.openMenu();assert(t.getMenu());assert(element('#start-game').innerHTML.includes('Resume mission'));t.enterGame();
+assert(!element('#panel').open,'Resuming does not replay the guide');
+element('#guide-open').onclick();
+assert.match(element('#panel-content').innerHTML,/Welcome! I’m Ayla/);
+t.transition('close');
 for(let n=0;n<3;n++){
  t.player.x=-.8;t.player.z=7.1;t.route(n);const route=t.getPath();assert(route.length>0,'Room route must exist');
  for(const [x,z] of route)assert(!t.blocked(x,z),'Route must avoid furniture and walls');
@@ -43,7 +60,7 @@ for(let chapter=0;chapter<3;chapter++){
 }
 s=t.initial();s.config={radar:true,power:true,radio:true,shield:true};t.setState(s);assert(t.cost()>t.budget());assert(t.mass()>16);
 t.transition('design');assert.equal(s.stage,0,'Cannot approve invalid design');
-t.setState(t.initial());t.player.x=-.8;t.player.z=7.1;t.loop(0);
+t.setState(t.initial());t.player.x=-.8;t.player.z=7.1;t.loop(8016);
 assert(draws.length>400,'Scene contains real 3D draws');
 for(const d of draws){assert(d.matrix.every(Number.isFinite));assert(d.vertices.every(Number.isFinite));assert.equal(d.vertices.length,d.normals.length);}
 fs.writeFileSync(path.join(__dirname,'scene-source.json'),JSON.stringify(context.window.missionScene));

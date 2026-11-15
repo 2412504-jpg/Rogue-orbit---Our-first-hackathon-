@@ -96,7 +96,25 @@ dialog:not(#start-screen){width:min(460px,calc(100% - 28px));padding:20px;border
   min-height: 44px;
   padding: 11px 16px;
 }
+#intro-sound {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(76px, calc(env(safe-area-inset-bottom) + 72px));
+  background: #081828df;
+  min-height: 44px;
+  padding: 11px 16px;
+}
+#intro-sound:hover { background: #21455e; }
+#intro-sound[hidden] { display: none; }
 #skip-intro:hover { background: #21455e; }
+.objective-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.objective-actions button { padding: 7px 9px; font-size: 11px; min-height: 34px; }
+.objective-actions .primary:hover { background: #ffe0a9; }
+#panel-content .guide-step { color: var(--mint); font-weight: 800; letter-spacing: .1em; font-size: 10px; margin-bottom: 6px; }
+.guide-title { font-size: 20px; margin: 0 0 8px; }
+.guide-title:focus { outline: none; }
+.label .diamond { color: var(--gold); text-shadow: 0 0 12px #e2a54fa0, 0 1px 3px #06111b; }
+.label .diamond + strong { border-color: #ffc980b0; }
 @media (max-width: 540px) {
   .menu-scrim { background: linear-gradient(90deg, #081828ea, #0818288a 72%, #08182858); }
 }

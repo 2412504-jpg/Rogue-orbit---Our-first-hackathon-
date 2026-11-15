@@ -134,15 +134,32 @@ const player={x:-.8,z:7.1,angle:Math.PI,y:0};
 let cameraAngle=.55,cameraDistance=30,cameraTarget=[0,0,0],eye=[0,0,0],viewProjection=identity(),follow=false;
 let target=null,waypoints=[],nearby=-1,keys=new Set(),moving=false,clock=0,last=performance.now(),frame;
 const panel=document.querySelector('#panel'),content=document.querySelector('#panel-content');
-const chapters=[{title:'Before the rain',target:'river bend',place:'Swat Valley',story:'Heavy rain is approaching Swat. The response team needs observations of the river bend before the next storm.',water:1.2,goal:12},{title:'The roads home',target:'riverside roads',place:'Swat Valley',story:'The flood is receding. Map the riverside roads so the recovery team can plan its next survey.',water:.7,goal:14},{title:'A shared sky',target:'coastal watershed',place:'Partner coastal watershed',story:'A coastal response team asks for help. Apply what Swat taught you to a new watershed.',water:1.6,goal:15}];
+const chapters=[{title:'Before the rain',target:'river bend',place:'Swat Valley',story:'More rain is coming to Swat. The team on Earth needs pictures of the river bend before the next storm.',water:1.2,goal:12},{title:'The roads home',target:'riverside roads',place:'Swat Valley',story:'The flood water is going down. Help the team see which roads near the river are still covered by water.',water:.7,goal:14},{title:'A shared sky',target:'coastal river',place:'Coastal river valley',story:'A team near the sea needs our help. Let’s use what we learned in Swat to watch another river.',water:1.6,goal:15}];
 const initial=()=>({version:1,chapter:0,stage:0,allocation:110,config:{radar:false,power:false,radio:false,shield:false},trust:70,turn:0,battery:14,stored:0,science:0,priority:0,points:[],fault:'battery',checks:{},flightLog:[]});
 let state=initial(),hasSave=false,menuOpen=true,hasStarted=false,hudHidden=false;
 const startScreen=document.querySelector('#start-screen');
 const menuIntro=document.querySelector('#menu-intro');
 const skipIntro=document.querySelector('#skip-intro');
+const introSound=document.querySelector('#intro-sound');
 const startContent=startScreen.querySelector('.start-content');
 const startButton=document.querySelector('#start-game');
 let introTimer, introState='idle';
+
+function setIntroSound(enabled){
+  menuIntro.muted=!enabled;
+  introSound.textContent=enabled?'Sound on':'Enable sound';
+  introSound.setAttribute('aria-pressed',String(enabled));
+}
+
+introSound.addEventListener('click',async()=>{
+  if(introState==='holding'||introState==='menu')return;
+  setIntroSound(true);
+  try{await menuIntro.play();}
+  catch{
+    setIntroSound(false);
+    introSound.textContent='Sound unavailable';
+  }
+});
 
 function revealStartMenu(){
   if(introState!=='playing')return;
@@ -189,7 +206,7 @@ function skipOpening(){
 
 function prepareStartScreen(){
   if(introState!=='idle')return;
-  menuIntro.muted=true;
+  setIntroSound(false);
   const useStill=reduced||new URLSearchParams(location.search).has('menu');
   if(useStill){
     introState='menu';
@@ -225,6 +242,7 @@ menuIntro.addEventListener('timeupdate',()=>{
 menuIntro.addEventListener('ended',finishIntroEarly);
 menuIntro.addEventListener('error',()=>{
   startScreen.classList.remove('has-intro-image');
+  introSound.hidden=true;
   if(introState==='playing')revealStartMenu();
 });
 skipIntro.addEventListener('click',skipOpening);
@@ -240,7 +258,19 @@ function openMenu(){
   if(!startScreen.open)startScreen.showModal();
   prepareStartScreen();
 }
-function enterGame(){menuOpen=false;hasStarted=true;startScreen.close();document.body.classList.remove('menu-open');canvas.focus();save();}
+function enterGame({showWelcome=true}={}){
+  menuOpen=false;
+  hasStarted=true;
+  startScreen.close();
+  document.body.classList.remove('menu-open');
+  if(showWelcome&&state.chapter===0&&state.stage===0&&!state.welcomeSeen){
+    state.welcomeSeen=true;
+    showGuide(0);
+  }else{
+    canvas.focus();
+  }
+  save();
+}
 const chapter=()=>chapters[state.chapter];
 const budget=()=>state.allocation??(110+(state.chapter*5)+(state.trust>=80?5:0));
 const cost=()=>78+Number(state.config.radar)*16+Number(state.config.power)*12+Number(state.config.radio)*9+Number(state.config.shield)*8;
@@ -253,12 +283,20 @@ function beep(frequency=600){
 }
 function toast(message){const element=document.querySelector('#toast');element.textContent=message;element.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>element.classList.remove('visible'),3000);}
 function updateHUD(){
-  const goals=['Meet Ayla in the briefing office.','Explore the flood model with Ayla.','Build your satellite with Zara.','Complete flight checks with Hamza.','Check in with Hamza and operate the satellite.','Review the mission with Ayla.'];
+  const goals=[
+    'Talk to Ayla in the briefing office.',
+    'Move the water slider. Then tell Ayla where to look.',
+    'Pick satellite parts with Zara. Then save your build.',
+    'Test your satellite with Hamza before you launch.',
+    'Take pictures and send them to Earth with Hamza.',
+    'Talk to Ayla to see how you did.'
+  ];
   document.querySelector('#chapter').textContent='CHAPTER '+String(state.chapter+1).padStart(2,'0')+' / 03';
   document.querySelector('#mission-title').textContent=chapter().title;
   document.querySelector('#objective').textContent=goals[state.stage];
+  document.querySelector('#go-to-objective').textContent='Walk to '+crew[activeCrew()].name;
   document.querySelector('#progress-fill').style.width=(8+state.stage*18)+'%';
-  document.querySelector('#status').textContent='Agency trust '+state.trust+' · '+(state.stage<4?budget()+' credits allocated':state.science+' / '+chapter().goal+' science delivered');
+  document.querySelector('#status').textContent='Team trust '+state.trust+' · '+(state.stage<4?budget()+' credits to spend':state.science+' / '+chapter().goal+' science points sent');
   document.querySelectorAll('[data-destination]').forEach((el,i)=>el.classList.toggle('active',i===activeCrew()));
 }
 function activeCrew(){return state.stage<=1||state.stage===5?0:state.stage===2?1:2;}
@@ -266,6 +304,37 @@ function narrate(){if(!audioEnabled||!window.speechSynthesis)return;window.speec
 function show(html){keys.clear();waypoints=[];panel.dataset.scene='room';content.innerHTML=html;if(!panel.open)panel.showModal();beep();narrate();}
 function speaker(index){const p=crew[index],hair=index===2?'#dce5df':'#273843';return '<div class="speaker"><div class="portrait" style="background:'+p.color+'"><svg viewBox="0 0 80 80" aria-hidden="true"><path d="M10 85Q10 56 40 56Q70 56 70 85" fill="'+p.color+'"/><ellipse cx="40" cy="35" rx="24" ry="28" fill="'+hair+'"/><rect x="34" y="49" width="12" height="15" rx="4" fill="#c78c6d"/><ellipse cx="40" cy="35" rx="20" ry="23" fill="#dba580"/><path d="M19 31Q16 4 41 8Q66 6 62 29L48 18Q37 29 19 31" fill="'+hair+'"/><g class="portrait-eyes" fill="#26394b"><ellipse cx="32" cy="35" rx="2.5" ry="3.2"/><ellipse cx="49" cy="35" rx="2.5" ry="3.2"/></g><path d="M35 47Q41 52 47 46" fill="none" stroke="#8d5348" stroke-width="2" stroke-linecap="round"/><path d="M40 37L38 42H42" fill="none" stroke="#ba7f61" stroke-width="1.5"/><path d="M32 61L40 68L48 61" fill="none" stroke="#e6f3df" stroke-width="3"/></svg></div><span class="eyebrow">'+p.role+'</span><h2>'+p.name+'</h2></div>';}
 function button(action,label,primary=false,disabled=false){return '<button data-action="'+action+'" class="'+(primary?'primary':'')+'" '+(disabled?'disabled':'')+'>'+label+'</button>';}
+const guideSteps=[
+  {
+    title:'Welcome! I’m Ayla',
+    line:'I lead the team here. The river in Swat is rising. Let’s send a CubeSat, a small satellite, to see where the water goes.',
+    hint:'First, come find me in the briefing office. That’s where we make our plan.'
+  },
+  {
+    title:'How to walk and talk',
+    line:'Use the W, A, S and D keys or the arrow keys to walk. Look for the gold diamond above the person you need to meet. When you get close, press E or tap the Talk button.',
+    hint:'Want help finding me? Tap the Walk to button and your character will go to the right person.'
+  },
+  {
+    title:'What we’ll do together',
+    line:'First, we’ll look at the flood map. Then Zara will help you build the satellite. Hamza will help you launch it, take pictures and send them to Earth.',
+    hint:'Read the box at the top left to see your next job. Tap Guide to hear from me again.'
+  }
+];
+
+function showGuide(step){
+  const {title,line,hint}=guideSteps[step];
+  const lastStep=step===guideSteps.length-1;
+  const next=lastStep
+    ?button('guide-route','Walk to '+crew[activeCrew()].name,true)
+    :button('guide-'+(step+1),'Next',true);
+  const closeLabel=lastStep?(menuOpen?'Back to menu':'I’ll walk there'):'Skip guide';
+  show(speaker(0)+'<p class="guide-step">MISSION GUIDE · '+(step+1)+' / '+guideSteps.length
+    +'</p><h3 tabindex="-1" class="guide-title">'+title+'</h3><p class="lead">'+line
+    +'</p><p>'+hint+'</p><div class="row">'+next
+    +(step>0?button('guide-'+(step-1),'Back'):'')+button('close',closeLabel)+'</div>');
+  content.querySelector('.guide-title')?.focus({preventScroll:true});
+}
 function stats(entries){return '<div class="stats">'+entries.map(([name,value])=>'<div><small>'+name+'</small><strong>'+value+'</strong></div>').join('')+'</div>';}
 const cubeSatPdf = 'https://science.nasa.gov/wp-content/uploads/2023/06/nasa_csli_cubesat_101_508.pdf';
 function cubeSatSource(page, section) {
@@ -274,16 +343,16 @@ function cubeSatSource(page, section) {
 
 function missionPlan() {
   return '<details class="cubesat-guide"><summary>Mission plan</summary>'
-    +'<p><strong>Target:</strong> '+chapter().target+'. <strong>Success:</strong> deliver '+chapter().goal+' science points to the response team.</p>'
-    +'<p><strong>Flight plan:</strong> Select an imaging payload and reserve power for imaging and radio. Verify the design on the ground, deploy from the dispenser, check in with the ground station, then collect and send observations.</p>'
-    +'<p>Keep a reserve for unexpected problems. A mission plan helps the team agree on what the satellite must do and how they will tell if it worked.</p>'
+    +'<p><strong>Target:</strong> '+chapter().target+'. <strong>Goal:</strong> send '+chapter().goal+' science points to the team on Earth.</p>'
+    +'<p><strong>Flight plan:</strong> Pick a tool for taking pictures. Save battery power for the camera and radio. Test your satellite before launch. Once it’s in space, check that it can talk to Earth, then take and send pictures.</p>'
+    +'<p>Save a little money and battery power in case something goes wrong. The plan tells us what to do and how we’ll know it worked.</p>'
     +cubeSatSource(19,'Concept development and funding')+'</details>';
 }
 
 const flightChecks = [
-  ['fit', 'Dispenser fit', 'Check stowed fit'],
-  ['power', 'Power and payload', 'Run bench test'],
-  ['link', 'Ground station', 'Test command and reply']
+  ['fit', 'Fits the rocket', 'Check the size'],
+  ['power', 'Battery and camera', 'Test the battery'],
+  ['link', 'Radio to Earth', 'Test the radio']
 ];
 const observationEnergy = () => state.config.radar ? 5 : 3;
 const solarCharge = () => state.config.power ? 4 : 2;
@@ -297,43 +366,43 @@ const launchLimitsMet = () => cost()<=budget() && mass()<=16 && fitsDispenser();
 const readyToLaunch = () => launchLimitsMet() && flightChecks.every(([id]) => state.checks?.[id]===true);
 
 function designStatus() {
-  if(cost()>budget()) return 'Over budget. Remove an upgrade.';
-  if(mass()>16) return 'Too heavy for the launcher. Remove an upgrade.';
-  if(!fitsDispenser()) return 'Too wide for the dispenser. Choose the larger array or the protected frame.';
-  return 'Your design fits the budget, mass and dispenser limits.';
+  if(cost()>budget()) return 'You spent too many credits. Take off an extra part.';
+  if(mass()>16) return 'This is too heavy for the rocket. Take off an extra part.';
+  if(!fitsDispenser()) return 'This is too wide to fit. Pick either bigger solar panels or the stronger frame.';
+  return 'Your build fits the rocket and stays within your spending limit.';
 }
 
 function stowedFit() {
-  return '<p><strong>Stowed size:</strong> '+stowedDimensions().join(' × ')+' cm. <strong>Game dispenser:</strong> '+dispenserLimit.join(' × ')+' cm (length × width × height).</p>';
+  return '<p><strong>Size when folded:</strong> '+stowedDimensions().join(' × ')+' cm. <strong>Room in the rocket’s box:</strong> '+dispenserLimit.join(' × ')+' cm (length × width × height).</p>';
 }
 
 function launchReview() {
   const checks = flightChecks.map(([id, name, label]) => {
     const passed = state.checks?.[id] === true;
-    const status = passed ? 'Passed' : 'Pending';
+    const status = passed ? 'Passed' : 'To do';
     return '<li><div><strong>'+name+' · '+status+'</strong>'
       +(passed ? '<small>'+flightCheckResult(id)+'</small>' : '')+'</div>'
       +button('check-'+id,label,false,passed)+'</li>';
   }).join('');
   show(speaker(2)
-    +'<h3>Flight readiness review</h3><p class="lead">Check that our design fits the launch slot, runs on battery power, and can talk to Earth.</p>'
-    +stats([['Mass',mass()+' / 16 kg'],['Spent',cost()+' / '+budget()+' cr'],['Battery',batteryMax()]])
+    +'<h3>Check before launch</h3><p class="lead">Let’s do three checks. Does it fit the rocket? Can it take a picture using the battery? Can it talk to Earth?</p>'
+    +stats([['Weight',mass()+' / 16 kg'],['Spent',cost()+' / '+budget()+' cr'],['Battery',batteryMax()]])
     +stowedFit()+'<p class="'+(launchLimitsMet()?'':'warning')+'">'+designStatus()+'</p>'
     +'<ul class="flight-checks" aria-label="Prelaunch checks">'+checks+'</ul>'
     +'<div class="row">'+button('launch','Launch the mission',true,!readyToLaunch())
-    +button('revise','Revise spacecraft')+'</div>'
+    +button('revise','Change the build')+'</div>'
     +'<details class="cubesat-guide"><summary>How a real launch review works</summary>'
-    +'<p>A dispenser secures the CubeSat to the rocket and releases it in orbit. Deployable panels and antennas stay folded inside it during launch.</p>'
-    +'<p>On real missions, the launch provider sets the interface requirements. Teams verify dimensions and mass, test the mission sequence with the ground station, and test the spacecraft against launch vibration and its expected environment. They also check applicable radio and imaging permissions.</p>'
-    +'<p>The checks here simulate fit, a battery-powered imaging cycle, and a command and reply. The game uses its own launch slot and limits.</p>'
+    +'<p>A dispenser is a box on the rocket. It holds the CubeSat during launch and lets it go in space. The solar panels and antenna are folded so they fit.</p>'
+    +'<p>Real teams check the size and weight of the satellite. They also test if it can handle the shaking of a launch and talk to the team on Earth. They check if they have permission to use their radio and take pictures.</p>'
+    +'<p>In this game, you check the size, use the battery to take a test picture, and send a test message.</p>'
     +cubeSatSource(33,'Readiness and dispenser integration')+' · '+cubeSatSource(67,'Flight testing')+' · '
     +cubeSatSource(51,'Licensing')+'</details>');
 }
 
 function flightCheckResult(id) {
-  if(id==='fit') return 'Panels and antenna stowed. The spacecraft fits the slot and is within the mass limit.';
-  if(id==='power') return 'One test observation drew '+observationEnergy()+' energy. Battery fell from '+batteryMax()+' to '+(batteryMax()-observationEnergy())+' in simulated shadow.';
-  return 'Ground station sent a command and received a reply. This radio can send '+downlinkLimit()+' observations per contact.';
+  if(id==='fit') return 'The panels and antenna are folded. Your satellite fits and is light enough.';
+  if(id==='power') return 'Taking one test picture used '+observationEnergy()+' energy. Battery fell from '+batteryMax()+' to '+(batteryMax()-observationEnergy())+' while the satellite was in shadow.';
+  return 'The radio on Earth sent a message and got a reply. Your satellite can send '+downlinkLimit()+' pictures each time it’s close enough to talk to Earth.';
 }
 
 function runFlightCheck(id) {
@@ -354,52 +423,52 @@ function interact(index=nearby){
   if(menuOpen||index<0||launchStart!==null)return;
   if(index===0){
     if(state.stage===5){report();return;}
-    show(speaker(0)+'<p class="lead">'+chapter().story+'</p><p>We can help by delivering useful satellite observations. First, look at the valley: where will rising river water spread?</p>'+stats([['Destination',chapter().place],['Science goal',chapter().goal],['Budget',budget()+' cr']])+'<div class="row">'+button('map','Explore the flood model',true)+button('close','Back to the office')+'</div>'+missionPlan());
+    show(speaker(0)+'<p class="lead">'+chapter().story+'</p><p>Pictures from space can help. Let’s look at the flood map first. Where do you think the water will go?</p>'+stats([['Where to look',chapter().place],['Points needed',chapter().goal],['Budget',budget()+' cr']])+'<div class="row">'+button('map','Open the flood map',true)+button('close','Back to the office')+'</div>'+missionPlan());
   }else if(index===1){
-    if(state.stage<2){show(speaker(1)+'<p class="lead">Ayla has your mission brief. Talk to her before we select the spacecraft parts.</p>'+button('close','I’ll find Ayla',true));return;}
-    if(state.stage>=4){show(speaker(1)+'<p>Your satellite is already in orbit. Hamza has the live operations panel.</p>'+button('close','Back',true));return;}
+    if(state.stage<2){show(speaker(1)+'<p class="lead">Ayla has the plan. Talk to her first, then come back and we’ll pick your satellite parts.</p>'+button('close','I’ll find Ayla',true));return;}
+    if(state.stage>=4){show(speaker(1)+'<p>Your satellite is already circling Earth. Talk to Hamza to take pictures and send them home.</p>'+button('close','Back',true));return;}
     workshop();
   }else{
     if(state.stage===4){operations();return;}
     if(state.stage===5){report();return;}
-    if(state.stage!==3){show(speaker(2)+'<p class="lead">The launch crew is waiting for the spacecraft design. Meet Ayla, then Zara, to prepare it.</p>'+button('close','Back',true));return;}
+    if(state.stage!==3){show(speaker(2)+'<p class="lead">Come back when your satellite is ready. Talk to Ayla first. Then Zara will help you build it.</p>'+button('close','Back',true));return;}
     launchReview();
   }
 }
 const cubeSatGuide = `
   <details class="cubesat-guide">
     <summary>CubeSat 101 · Why these parts matter</summary>
-    <p>A CubeSat is a small satellite built in standard sizes. One unit (1U) is roughly 10 cm on each side.</p>
+    <p>A CubeSat is a small satellite. One standard size, called 1U, is a cube about 10 cm wide.</p>
     <dl>
       <dt>Payload</dt>
-      <dd>The payload does the mission's main job. Here, an optical camera or radar gathers observations of the valley.</dd>
+      <dd>A payload is the tool your satellite carries to do its job. Here, it’s a camera or radar that looks at the valley.</dd>
       <dt>Power</dt>
-      <dd>Solar panels generate electricity in sunlight, and batteries store energy. In this mission, the larger array upgrade also gives you a bigger battery.</dd>
+      <dd>Solar panels use sunlight to make electricity. A battery saves power for later. In this game, bigger panels come with a bigger battery.</dd>
       <dt>Communication</dt>
-      <dd>A ground station uses a radio and antenna to exchange signals with the satellite. In this mission, the fast radio sends more observations on each contact pass.</dd>
-      <dt>Data and pointing</dt>
-      <dd>The onboard computer stores observations until a downlink. An attitude control system helps point the instrument toward its target and solar panels toward the Sun. In this game, pointing is automatic.</dd>
+      <dd>A ground station is a place on Earth with a radio and antenna. It sends and receives messages. In this game, a faster radio can send more pictures at a time.</dd>
+      <dt>Saving pictures and aiming</dt>
+      <dd>The satellite’s computer saves pictures until it can send them to Earth. A system helps aim the camera at Earth and the panels at the Sun. The game does the aiming for you.</dd>
       <dt>Launch limits</dt>
-      <dd>Satellites must meet their launcher's size and mass limits. A larger solar array or a protected frame takes up more space in this mission's dispenser.</dd>
+      <dd>The satellite must fit in the rocket and be light enough to carry. Bigger solar panels and a stronger frame take up more room.</dd>
     </dl>
-    <p class="cubesat-source">Credits, dimensions, mass limits and energy figures are simplified for gameplay.</p>
+    <p class="cubesat-source">The prices, sizes and battery numbers are made for the game.</p>
     <a href="https://science.nasa.gov/wp-content/uploads/2023/06/nasa_csli_cubesat_101_508.pdf#page=12" target="_blank" rel="noopener noreferrer">Source: NASA CubeSat 101 (PDF, opens in a new tab)</a>
   </details>`;
 
 function workshop(){
-  const choices=[['radar','Radar instrument','Cloud-capable · +16 cr · +3 kg'],['power','Larger solar array','22 battery / +4 charge · +12 cr · +2 kg'],['radio','Fast radio','Sends 3 observations · +9 cr · +1 kg'],['shield','Protected frame','Reduces fault losses · +8 cr · +2 kg']];
+  const choices=[['radar','Radar','Sees through clouds · +16 cr · +3 kg'],['power','Bigger solar panels','Holds 22 power, adds 4 in sunlight · +12 cr · +2 kg'],['radio','Fast radio','Sends 3 pictures · +9 cr · +1 kg'],['shield','Stronger frame','Saves power if the battery has a problem · +8 cr · +2 kg']];
   const partButtons = choices.map(([id,name,hint])=>
     '<button data-part="'+id+'" class="'+(state.config[id]?'chosen':'')+'" aria-pressed="'+state.config[id]+'">'
     +'<strong>'+(state.config[id]?'✓ ':'＋ ')+name+'</strong><small>'+hint+'</small></button>'
   ).join('');
   const valid = launchLimitsMet();
-  show(speaker(1)+'<p class="lead">Build for the mission. Check what you’ll need to collect data and send it home.</p>'
+  show(speaker(1)+'<p class="lead">Let’s build your satellite. Tap a part to add or remove it. Watch what happens to your money, weight and battery.</p>'
     +'<div class="parts">'+partButtons+'</div>'
-    +stats([['Budget used',cost()+' / '+budget()],['Launch mass',mass()+' / 16 kg'],['Battery',batteryMax()]])
+    +stats([['Budget used',cost()+' / '+budget()],['Weight',mass()+' / 16 kg'],['Battery',batteryMax()]])
     +stowedFit()
-    +'<p class="hint">The base build includes an optical camera, solar panels, battery, radio and frame. Radar improves cloudy observations at a higher energy cost. Hamza tests the approved build before launch.</p>'
+    +'<p class="hint">You start with a camera, solar panels, a battery and a radio. Radar sees through clouds but uses more power. When you’re ready, save your build and visit Hamza.</p>'
     +'<p role="status" class="'+(valid?'':'warning')+'">'+designStatus()+'</p>'
-    +'<div class="row">'+button('design','Approve design',true,!valid)+button('close','Inspect the spacecraft')+'</div>'+cubeSatGuide);
+    +'<div class="row">'+button('design','Save this build',true,!valid)+button('close','Look around')+'</div>'+cubeSatGuide);
 }
 // Connected inundation on a synthetic elevation grid. Flow follows steepest descent.
 const N=70,M=42,dem=[],channel=[],drains=[];
@@ -415,7 +484,7 @@ function wetCells(level){
 }
 function mapView(){
   if(state.stage===0){state.stage=1;save();updateHUD();}
-  show(speaker(0)+'<p class="lead">Watch the river reach the low ground.</p><div class="map-controls">'+['depth','elevation','drainage'].map(layer=>'<button data-layer="'+layer+'" class="'+(mapLayer===layer?'selected':'')+'">'+({depth:'Flood depth',elevation:'Elevation',drainage:'Watershed'})[layer]+'</button>').join('')+'</div><canvas id="dem" width="640" height="300" aria-label="Synthetic river valley elevation and connected flood model"></canvas><label for="water">River rise <output id="water-label">'+water.toFixed(2)+'</output> model units</label><input id="water" type="range" min="0" max="2" step=".05" value="'+water+'"><div class="readout" id="map-readout"></div><p class="hint">Water spreads from the river into connected low cells. The elevation grid is synthetic, inspired by Swat. This is an educational model, not a real flood forecast.</p><div class="row">'+button('water','Animate rising water')+button('brief','Confirm target: '+chapter().target,true)+'</div>');drawDEM();
+  show(speaker(0)+'<p class="lead">Move the water slider to see where the river spreads.</p><div class="map-controls">'+['depth','elevation','drainage'].map(layer=>'<button data-layer="'+layer+'" class="'+(mapLayer===layer?'selected':'')+'">'+({depth:'Flood depth',elevation:'Land height',drainage:'Where water flows'})[layer]+'</button>').join('')+'</div><canvas id="dem" width="640" height="300" aria-label="Practice map showing the river valley and where water spreads"></canvas><label for="water">River rise <output id="water-label">'+water.toFixed(2)+'</output> model units</label><input id="water" type="range" min="0" max="2" step=".05" value="'+water+'"><div class="readout" id="map-readout"></div><p class="hint">Water spills out of the river onto low land beside it. This map is made up for practice and is based on a river valley like Swat.</p><div class="row">'+button('water','Watch the water rise')+button('brief','Pick the '+chapter().target,true)+'</div>');drawDEM();
 }
 function drawDEM(){
   const c=document.querySelector('#dem');if(!c)return;const ctx=c.getContext('2d'),wet=wetCells(water);
@@ -431,7 +500,7 @@ function drawDEM(){
     ctx.beginPath();points.forEach(([a,b],j)=>j?ctx.lineTo(a,b):ctx.moveTo(a,b));ctx.closePath();ctx.fillStyle=color;ctx.fill();ctx.strokeStyle=color;ctx.lineWidth=.5;ctx.stroke();
   }
   const [px,py]=project(river(22),22,(M-22)*.045+water);ctx.fillStyle='#ffcf87';ctx.beginPath();ctx.arc(px,py-9,5,0,Math.PI*2);ctx.fill();ctx.font='bold 13px system-ui';ctx.strokeStyle='#0d2636';ctx.lineWidth=4;ctx.strokeText('PRIORITY · '+chapter().target.toUpperCase(),px+12,py-6);ctx.fillText('PRIORITY · '+chapter().target.toUpperCase(),px+12,py-6);
-  document.querySelector('#map-readout').textContent=(flooded/(N*M)*100).toFixed(1)+'% of model cells newly wet · '+(mapLayer==='drainage'?'Mint cells drain into the channel.':'Cyan shows connected flooding. Darker blue is deeper.');
+  document.querySelector('#map-readout').textContent=(flooded/(N*M)*100).toFixed(1)+'% of the map is covered by water that spilled out of the river · '+(mapLayer==='drainage'?'Green areas send water toward the river.':'Light blue shows where the river has spread. Darker blue means deeper water.');
   document.querySelector('#water-label').textContent=water.toFixed(2);
 }
 let tableLevel=-1;
@@ -448,17 +517,17 @@ function terrainTable(){
   ['#83af86','#c1c59b','#57bad2'].forEach((c,i)=>draw('terrain'+i,identity(),c,i===2?.2:0));
 }
 const commissioningSteps = [
-  ['Confirm dispenser release', 'The rocket has reached orbit. Confirm the dispenser released the CubeSat before deploying its antenna.'],
-  ['Receive beacon', 'The antenna is extended. Listen for a beacon so the ground station can identify the satellite.'],
-  ['Verify telemetry', 'The beacon is received. Check the battery reading and confirm that the satellite responds before starting the imaging mission.']
+  ['Check that the satellite is free', 'The rocket is circling Earth. That’s called orbit. First, check that the CubeSat has left its box before we open the antenna.'],
+  ['Listen for a signal', 'The antenna is open. Listen for a short radio signal, like the CubeSat saying hello.'],
+  ['Check the battery and radio', 'We heard the CubeSat! Check its battery and make sure it answers before we start taking pictures.']
 ];
 const commissioningPending = () => Number.isInteger(state.commission) && state.commission < commissioningSteps.length;
 
 function commissioning() {
   const [label, instruction] = commissioningSteps[state.commission];
-  show(speaker(2)+'<h3>First contact · '+(state.commission+1)+' / '+commissioningSteps.length+'</h3>'
+  show(speaker(2)+'<h3>First call from space · '+(state.commission+1)+' / '+commissioningSteps.length+'</h3>'
     +'<p class="lead">'+instruction+'</p>'
-    +stats([['Battery',state.battery+' / '+batteryMax()],['Link',state.commission===2?'Beacon heard':'Waiting']])
+    +stats([['Battery',state.battery+' / '+batteryMax()],['Radio',state.commission===2?'Signal heard':'Waiting']])
     +button('commission-'+state.commission,label,true)
     +'<p>'+cubeSatSource(37,'Early mission operations')+'</p>');
   panel.dataset.scene='orbit';
@@ -474,7 +543,7 @@ const passes = [
   { cloud:false, sun:false, contact:false },
   { cloud:false, sun:true,  contact:true }
 ];
-const flightActions = {observe:'Observe',send:'Downlink',rest:'Rest'};
+const flightActions = {observe:'Take a picture',send:'Send pictures',rest:'Rest'};
 function batteryAfterPass(pass, action, spent) {
   const faultLoss = pass.fault && action!=='rest' ? (state.config.shield?1:4) : 0;
   const afterUse = Math.max(0,state.battery-spent-faultLoss);
@@ -482,11 +551,11 @@ function batteryAfterPass(pass, action, spent) {
 }
 
 function passPlan() {
-  return '<details class="cubesat-guide"><summary>Plan the remaining passes</summary>'
-    +'<p>During eclipse, Earth blocks sunlight and the spacecraft runs on stored energy. Downlink is available only when the ground station can contact the satellite.</p>'
+  return '<details class="cubesat-guide"><summary>See what’s coming next</summary>'
+    +'<p>Each turn is a pass. In Earth’s shadow, called an eclipse, the satellite gets no sunlight and uses its battery. You can send pictures only when the radio can reach the team on Earth.</p>'
     +'<ol class="pass-plan" start="'+(state.turn+1)+'">'+passes.slice(state.turn).map(pass=>
-      '<li>'+(pass.sun?'Sunlight':'Eclipse')+' · '+(pass.cloud?'Cloudy target':'Clear target')+' · '+(pass.contact?'Ground contact':'No contact')+'</li>'
-    ).join('')+'</ol><p>The pass schedule and energy figures are set for this simulation.</p>'
+      '<li>'+(pass.sun?'Sunlight':'Earth’s shadow')+' · '+(pass.cloud?'Cloudy skies':'Clear skies')+' · '+(pass.contact?'Can send pictures':'Can’t send pictures')+'</li>'
+    ).join('')+'</ol><p>The game sets the weather, sunlight and radio times for each turn.</p>'
     +cubeSatSource(37,'Tracking and mission operations')+'</details>';
 }
 
@@ -495,24 +564,24 @@ function operations(){
   const pass = passes[state.turn];
   const canObserve = state.points.length<3 && state.battery>=observationEnergy();
   const canSend = pass.contact && state.points.length>0 && state.battery>=2;
-  let line = pass.contact ? 'The ground station is in range. Send stored observations while you have contact.'
-    : pass.cloud ? 'Clouds cover the target. Radar can still collect detailed observations.'
-    : 'Clear skies over the target. Consider collecting an observation.';
-  if(pass.fault) line = 'Battery fault. Rest to avoid extra drain, or continue with the loss shown below.';
+  let line = pass.contact ? 'You can reach the team on Earth now. Send any pictures you’ve saved.'
+    : pass.cloud ? 'It’s cloudy below. Radar can see through clouds, but a regular camera can’t.'
+    : 'The sky is clear. This is a good time to take a picture.';
+  if(pass.fault) line = 'The battery has a problem. Rest to save power, or use the numbers below to see how much power you’ll have left.';
   const forecast = [
-    canObserve && 'Observe '+batteryAfterPass(pass,'observe',observationEnergy()),
-    canSend && 'Downlink '+batteryAfterPass(pass,'send',2),
-    'Rest '+batteryAfterPass(pass,'rest',0)
+    canObserve && 'Take a picture: '+batteryAfterPass(pass,'observe',observationEnergy()),
+    canSend && 'Send pictures: '+batteryAfterPass(pass,'send',2),
+    'Rest: '+batteryAfterPass(pass,'rest',0)
   ].filter(Boolean).join(' · ');
-  show(speaker(2)+'<span class="eyebrow">ORBITAL PASS '+(state.turn+1)+' / '+passes.length+'</span>'
+  show(speaker(2)+'<span class="eyebrow">TURN '+(state.turn+1)+' / '+passes.length+'</span>'
     +'<p class="lead">'+line+'</p>'
-    +stats([['Battery',state.battery+' / '+batteryMax()],['Stored observations',state.points.length+' / 3'],['Delivered science',state.science+' / '+chapter().goal]])
-    +'<p><strong>Power:</strong> '+(pass.sun?'Sunlight restores '+solarCharge()+' energy after the action.':'Eclipse: no solar charge this pass.')
-    +' <strong>Radio:</strong> '+(pass.contact?'Up to '+downlinkLimit()+' observations per downlink.':'Outside ground station range.')+'</p>'
-    +'<p>Imaging costs '+observationEnergy()+' energy. Downlink costs 2. <strong>Battery after this pass:</strong> '+forecast+'.</p>'
-    +'<div class="row">'+button('observe','Observe '+chapter().target,true,!canObserve)
-    +button('send','Transmit to Earth',false,!canSend)+button('rest',pass.sun?'Rest and recharge':'Rest in eclipse')+'</div>'
-    +'<p class="hint">'+(state.last||'Only transmitted data can help the response team.')+'</p>'+passPlan());
+    +stats([['Battery',state.battery+' / '+batteryMax()],['Pictures saved',state.points.length+' / 3'],['Points sent',state.science+' / '+chapter().goal]])
+    +'<p><strong>Power:</strong> '+(pass.sun?'Sunlight gives back '+solarCharge()+' power after your move.':'Earth is blocking the Sun. The battery won’t charge this turn.')
+    +' <strong>Radio:</strong> '+(pass.contact?'Up to '+downlinkLimit()+' pictures can be sent now.':'The radio can’t reach Earth right now.')+'</p>'
+    +'<p>Taking a picture uses '+observationEnergy()+' power. Sending pictures uses 2. <strong>Battery after your move:</strong> '+forecast+'.</p>'
+    +'<div class="row">'+button('observe','Take a picture',true,!canObserve)
+    +button('send','Send pictures to Earth',false,!canSend)+button('rest',pass.sun?'Rest and recharge':'Rest in Earth’s shadow')+'</div>'
+    +'<p class="hint">'+(state.last||'Each picture can earn science points. You get those points when you send the picture to Earth.')+'</p>'+passPlan());
   panel.dataset.scene='orbit';
 }
 function takeTurn(action){
@@ -523,19 +592,19 @@ function takeTurn(action){
     spent=observationEnergy();
     if(state.points.length>=3||state.battery<spent)return;
     state.points.push(state.config.radar?5:pass.cloud?1:4);
-    state.last='Observation collected. It is stored onboard until transmission.';
+    state.last='Picture saved! Send it when the radio can reach Earth.';
     beep(770);
   }else if(action==='send'){
     spent=2;
     if(!pass.contact||!state.points.length||state.battery<spent)return;
     delivered=state.points.splice(0,downlinkLimit()).reduce((a,b)=>a+b,0);
     state.science+=delivered;
-    state.last=delivered+' science points reached the response team.';
+    state.last=delivered+' science points reached the team on Earth.';
     beep(990);
   }else if(action==='rest'){
-    state.last=pass.sun?'Instrument rested while the battery recharged.':'Instrument rested in eclipse.';
+    state.last=pass.sun?'You rested while the battery charged.':'You rested in Earth’s shadow.';
   }else return;
-  if(pass.fault&&action!=='rest')state.last+=' Battery fault added '+(state.config.shield?1:4)+' to the energy cost.';
+  if(pass.fault&&action!=='rest')state.last+=' The battery problem used '+(state.config.shield?1:4)+' extra power.';
   state.battery=batteryAfterPass(pass,action,spent);
   state.flightLog ??= [];
   state.flightLog.push({pass:state.turn+1,action,battery:state.battery,delivered});
@@ -546,22 +615,32 @@ function takeTurn(action){
 function flightRecord() {
   const entries = state.flightLog || [];
   const rows = entries.map(entry=>'<tr><td>'+Number(entry.pass)+'</td><td>'+flightActions[entry.action]+'</td><td>'+Number(entry.battery)+'</td><td>'+Number(entry.delivered)+'</td></tr>').join('');
-  return '<details class="cubesat-guide"><summary>Flight log and mission closeout</summary>'
-    +(rows ? '<table class="flight-log"><caption>Recorded passes</caption><thead><tr><th scope="col">Pass</th><th scope="col">Action</th><th scope="col">Battery left</th><th scope="col">Science sent</th></tr></thead><tbody>'+rows+'</tbody></table>' : '')
-    +'<p>Compare battery readings after imaging, downlink, and rest. The science column shows how much data reached the response team on each recorded pass.</p>'
-    +'<p>Real mission teams also plan end-of-life steps to reduce orbital debris. This simulation ends after the eighth pass.</p>'
+  return '<details class="cubesat-guide"><summary>See what you did each turn</summary>'
+    +(rows ? '<table class="flight-log"><caption>Your turns</caption><thead><tr><th scope="col">Turn</th><th scope="col">Action</th><th scope="col">Battery left</th><th scope="col">Points sent</th></tr></thead><tbody>'+rows+'</tbody></table>' : '')
+    +'<p>See how much battery power was left after each move and how many points you sent to Earth.</p>'
+    +'<p>Real teams make a plan for old satellites so they don’t leave junk circling Earth. Your game mission ends after eight turns.</p>'
     +cubeSatSource(37,'Mission operations')+' · '+cubeSatSource(62,'Orbital debris planning')+'</details>';
 }
 function report(){
   const effective=Math.min(100,Math.round(state.science/chapter().goal*100)),efficiency=Math.round(effective*(.65+.20*Math.max(0,budget()-cost())/budget()+.15*state.battery/batteryMax()));
-  show(speaker(0)+'<h2>'+({success:'A clearer picture for home',partial:'Useful data, with gaps',failure:'The mission needs another attempt'}[state.outcome]||'Mission report')+'</h2>'+stats([['Effectiveness',effective+'%'],['Efficiency',efficiency+'%'],['Agency trust',state.trust]])+'<p>'+state.science+' science points reached the team. '+state.points.length+' observations remained onboard. '+(state.outcome==='success'?'Your partners can plan the next survey with greater confidence.':state.outcome==='partial'?'The next mission continues, but uncertainty remains.':'The agency loses trust. Review your power and transmission plan before retrying.')+'</p><p class="hint">Clouds reduce optical quality. Full storage prevents observing. Radio windows limit transmission. Budget and battery reserves influence efficiency.</p><div class="row">'+button(state.outcome==='failure'?'retry':'next',state.outcome==='failure'?'Revise spacecraft':state.chapter===2?'Complete campaign':'Continue the story',true)+button('close','Back to the centre')+'</div>'+flightRecord());
+  show(speaker(0)+'<h2>'+({success:'A clearer picture for home',partial:'You sent some useful pictures',failure:'Let’s try the mission again'}[state.outcome]||'Mission report')+'</h2>'+stats([['Goal reached',effective+'%'],['Money and power score',efficiency+'%'],['Team trust',state.trust]])+'<p>'+state.science+' science points reached the team. '+state.points.length+' pictures were still on the satellite. '+(state.outcome==='success'?'The team on Earth has the pictures it needs to plan what to do next.':state.outcome==='partial'?'You can move to the next mission. The team still needs a clearer picture.':'The team trusts your plan a little less. Try again and save enough power to send your pictures.')+'</p><p class="hint">Clouds can hide the ground. If there’s no room for more pictures, send some first. Your score also counts the money and battery power you saved.</p><div class="row">'+button(state.outcome==='failure'?'retry':'next',state.outcome==='failure'?'Change the build':state.chapter===2?'Finish the story':'Continue the story',true)+button('close','Back to the centre')+'</div>'+flightRecord());
 }
 function transition(action){
+  if(/^guide-[0-2]$/.test(action)){showGuide(Number(action.slice(-1)));return;}
+  if(action==='guide-route'){
+    panel.close();
+    if(menuOpen){
+      state.welcomeSeen=true;
+      enterGame({showWelcome:false});
+    }
+    route(activeCrew());
+    return;
+  }
   if(action==='close'){panel.close();return;}
   if(action==='map'){mapView();return;}
   if(action==='water'){floodPlaying=!floodPlaying;if(floodPlaying)water=0;return;}
-  if(action==='brief'){state.stage=Math.max(2,state.stage);save();updateHUD();panel.close();toast('Priority set. Meet Zara in engineering.');return;}
-  if(action==='design'){if(![2,3].includes(state.stage)||!launchLimitsMet())return;state.stage=3;save();updateHUD();panel.close();toast('Design approved. Complete the flight checks with Hamza.');return;}
+  if(action==='brief'){state.stage=Math.max(2,state.stage);save();updateHUD();panel.close();toast('You picked where to look. Go to Zara to build your satellite.');return;}
+  if(action==='design'){if(![2,3].includes(state.stage)||!launchLimitsMet())return;state.stage=3;save();updateHUD();panel.close();toast('Build saved. Go to Hamza to test your satellite.');return;}
   if(action==='revise'&&state.stage===3){state.stage=2;save();updateHUD();panel.close();return;}
   if(action.startsWith('check-')){runFlightCheck(action.slice(6));return;}
   if(action==='launch'){
@@ -579,8 +658,8 @@ function transition(action){
   if(['observe','send','rest'].includes(action)){takeTurn(action);return;}
   if(action==='retry'){state.stage=2;state.points=[];state.turn=0;state.science=0;state.checks={};state.flightLog=[];save();updateHUD();panel.close();return;}
   if(action==='next'){
-    if(state.chapter===2){show(speaker(0)+'<h2>You brought the mission home.</h2><p class="lead">Three chapters. One shared sky.</p><p>Your decisions connected spacecraft engineering to useful observations on Earth. Your agency finishes with '+state.trust+' trust.</p>'+button('close','Explore your mission centre',true));return;}
-    state.chapter++;state.allocation=110+state.chapter*5+(state.trust>=80?5:0);state.stage=0;state.turn=0;state.points=[];state.science=0;state.checks={};state.flightLog=[];water=chapter().water;save();updateHUD();panel.close();toast('New chapter unlocked. Ayla has your next mission.');return;
+    if(state.chapter===2){show(speaker(0)+'<h2>You brought the mission home.</h2><p class="lead">You finished all three missions!</p><p>You sent pictures from space to help teams on Earth. Your final team trust score is '+state.trust+' out of 100.</p>'+button('close','Explore your mission centre',true));return;}
+    state.chapter++;state.allocation=110+state.chapter*5+(state.trust>=80?5:0);state.stage=0;state.turn=0;state.points=[];state.science=0;state.checks={};state.flightLog=[];water=chapter().water;save();updateHUD();panel.close();toast('Your next mission is ready. Go see Ayla.');return;
   }
 }
 content.onclick=event=>{
@@ -601,15 +680,21 @@ content.onclick=event=>{
 };
 content.oninput=event=>{if(event.target.id==='water'){water=Number(event.target.value);floodPlaying=false;drawDEM();}};
 document.querySelector('.close').onclick=()=>panel.close();
-panel.addEventListener('close',()=>{floodPlaying=false;window.speechSynthesis?.cancel();canvas.focus();});
+panel.addEventListener('close',()=>{
+  if(panel.open)return;
+  floodPlaying=false;
+  window.speechSynthesis?.cancel();
+  if(!menuOpen)canvas.focus();
+});
 document.querySelector('#skip').onclick=()=>{launchStart=null;document.querySelector('#cinematic').hidden=true;operations();};
 document.querySelector('#sound').onclick=event=>{audioEnabled=!audioEnabled;event.target.textContent=audioEnabled?'Sound on':'Sound off';event.target.setAttribute('aria-pressed',String(audioEnabled));if(!audioEnabled)window.speechSynthesis?.cancel();else if(panel.open)narrate();beep();};
-document.querySelector('#help').onclick=()=>show('<span class="eyebrow">WELCOME, COMMANDER</span><h2>Your mission centre</h2><p class="lead">Walk through the centre to meet your crew.</p><p><b>WASD / arrows</b> move your character. <b>E</b> talks to the nearby crew member. <b>Q / R</b> rotate the camera. Scroll or use + / − to zoom. Hold Shift to run. The room buttons walk your character to a station.</p><p>Follow the gold diamond. Ayla briefs you and shows the flood model. Zara helps build your spacecraft. Hamza launches it and guides orbital operations.</p><p>Flood terrain and orbit schedules are simplified educational models.</p>'+button('close','Let’s explore',true));
-document.querySelector('#reset').onclick=()=>show('<h2>Start a new campaign?</h2><p>This replaces the saved progress for this 3D edition on this device.</p><div class="row"><button id="confirm-reset" class="primary">Start again</button>'+button('close','Keep playing')+'</div>');
+document.querySelector('#help').onclick=()=>show('<span class="eyebrow">WELCOME, COMMANDER</span><h2>Your mission centre</h2><p class="lead">Walk around to meet your team.</p><p><b>WASD / arrows</b> move your character. Press <b>E</b> to talk when you’re close. Press <b>Q</b> or <b>R</b> to turn the camera. Use + or − to see closer or farther away. Hold Shift to run. Tap a room button to walk there.</p><p>Look for the gold diamond. Ayla shows you the flood map. Zara helps you build a satellite. Hamza helps you launch it and send pictures to Earth.</p><p>The game uses a made-up flood map and sets when you can send pictures.</p>'+button('close','Let’s explore',true));
+document.querySelector('#reset').onclick=()=>show('<h2>Start the story again?</h2><p>Starting again will erase your saved game on this device.</p><div class="row"><button id="confirm-reset" class="primary">Start again</button>'+button('close','Keep playing')+'</div>');
 content.addEventListener('click',event=>{if(event.target.id==='confirm-reset'){state=initial();save();updateHUD();panel.close();player.x=-.8;player.z=7.1;player.angle=Math.PI;cameraAngle=.55;cameraDistance=30;follow=false;document.querySelector('#overview').textContent='Follow player';water=chapter().water;enterGame();}});
-document.querySelector('#start-game').onclick=enterGame;
+document.querySelector('#start-game').onclick=()=>enterGame();
 document.querySelector('#menu').onclick=openMenu;
-document.querySelector('#start-help').onclick=()=>document.querySelector('#help').onclick();
+document.querySelector('#start-help').onclick=()=>showGuide(0);
+document.querySelector('#guide-open').onclick=()=>showGuide(0);
 startScreen.addEventListener('cancel',event=>{
   event.preventDefault();
   if(introState==='playing')skipOpening();
@@ -620,7 +705,11 @@ document.querySelector('#hud-toggle').onclick=toggleHUD;
 function blocked(x,z){return x<-14.1||x>14.1||z<-9.95||z>10||colliders.some(c=>Math.abs(x-c.x)<c.w&&Math.abs(z-c.z)<c.d);}
 function move(dx,dz){if(!blocked(player.x+dx,player.z))player.x+=dx;if(!blocked(player.x,player.z+dz))player.z+=dz;}
 function route(index){
+  keys.clear();
+  waypoints=[];
+  target=null;
   const p=crew[index],step=.45,toCell=(x,z)=>[Math.round(x/step),Math.round(z/step)],key=(x,z)=>x+','+z;
+  if(Math.hypot(p.x-player.x,p.z-player.z)<2){interact(index);return;}
   const start=toCell(player.x,player.z),goal=toCell(p.x,p.z+1.15),queue=[start],came=new Map([[key(...start),null]]);
   let end=null;
   for(let n=0;n<queue.length&&n<7000;n++){
@@ -631,12 +720,12 @@ function route(index){
       if(!came.has(id)&&!blocked(next[0]*step,next[1]*step)){came.set(id,cell);queue.push(next);}
     }
   }
-  waypoints=[];
   if(end){while(came.get(key(...end))){waypoints.unshift([end[0]*step,end[1]*step]);end=came.get(key(...end));}target=index;}
-  else toast('Walk a little into the open walkway, then try again.');
+  else toast('Move away from the furniture and try the Walk to button again.');
   canvas.focus();
 }
 document.querySelectorAll('[data-destination]').forEach(button=>button.onclick=()=>route(Number(button.dataset.destination)));
+document.querySelector('#go-to-objective').onclick=()=>route(activeCrew());
 document.querySelector('#interact').onclick=()=>interact();
 document.querySelector('#zoom-in').onclick=()=>cameraDistance=Math.max(16,cameraDistance-3);
 document.querySelector('#zoom-out').onclick=()=>cameraDistance=Math.min(48,cameraDistance+3);

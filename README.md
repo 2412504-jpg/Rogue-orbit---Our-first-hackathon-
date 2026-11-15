@@ -8,11 +8,13 @@ This combined edition keeps the expanded mission-planning, spacecraft-check, tel
 
 Extract the ZIP, then open **PLAY.html** in Chrome or Edge. No package installation, account, API key, or server is required. WebGL must be available. For editing in VS Code, open this folder and use Live Server on `index.html`, or run `node server.cjs` and visit http://127.0.0.1:4174.
 
-The opening animation plays muted and holds on its final frame as the start menu fades in. **Skip intro** or Escape opens the menu immediately. Returning from Fun Mode or enabling reduced motion goes straight to the menu. Keep `assets/mission-intro.mp4` beside the game in the extracted `assets` folder so the animation can play offline.
+The opening animation begins muted so browsers can autoplay it. Click **Enable sound** during the intro to hear its included audio track. It holds on its final frame as the start menu fades in. **Skip intro** or Escape opens the menu immediately. Returning from Fun Mode or enabling reduced motion goes straight to the menu. Keep `assets/mission-intro.mp4` beside the game in the extracted `assets` folder so the animation and audio can play offline.
 
 Choose **Start game** or **Continue mission** when progress exists. **Menu** or Escape returns to this screen during play; **Resume mission** keeps your current position and progress. New campaign asks before replacing the save. The interface uses compact mission cards, smaller dialogue panels, and crew role labels only when nearby.
 
 ## Controls
+
+Ayla opens a three-step guide on your first mission. Choose **Walk to Ayla** at the end to follow the route and start her briefing, or walk there yourself and press **E**. The mission card's **Walk to** button follows your current objective, and **Guide** reopens the walkthrough. You can also find it under **How to play** on the start screen.
 
 - WASD or arrow keys: walk. Shift: run.
 - E: talk to a nearby crew member.
