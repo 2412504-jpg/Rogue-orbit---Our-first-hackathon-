@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#122333"><title>Protect Our Home — Mission Centre 3D</title><link rel="stylesheet" href="style.css"></head>
+<body class="menu-open">
+<canvas id="world" tabindex="0" aria-label="3D mission centre. WASD moves, E interacts, Q and R rotate the camera."></canvas>
+<header><a class="brand" href="#"><span>✦</span><div>PROTECT OUR HOME<small>SWAT • MISSION CENTRE</small></div></a><div class="top-actions"><button id="sound">Sound off</button><button id="hud-toggle" aria-pressed="false">Hide HUD</button><button id="help">Controls</button><button id="menu">Menu</button></div></header>
+<aside class="quest"><span class="eyebrow" id="chapter">CHAPTER 01 / 03</span><h1 id="mission-title">Before the rain</h1><p id="objective">Meet Ayla in the briefing office.</p><div class="progress"><i id="progress-fill"></i></div><small id="status">Your first day as mission commander</small></aside>
+<div class="location"><span class="live"></span><span id="room-name">MISSION CENTRE</span><span class="version">3D EDITION</span></div>
+<div id="npc-labels"></div>
+<div class="bottom"><div class="keyguide"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>Move</span><kbd>E</kbd><span>Interact</span><kbd>Q</kbd><kbd>R</kbd><span>Rotate</span></div><button id="interact" disabled>Walk up to a crew member</button><div class="zoom"><button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="overview">Follow player</button></div></div>
+<div id="touch"><button data-dir="up">↑</button><button data-dir="left">←</button><button data-dir="down">↓</button><button data-dir="right">→</button></div>
+<nav class="destinations" aria-label="Walk to room"><button data-destination="0">① Briefing office</button><button data-destination="1">② Engineering</button><button data-destination="2">③ Space room</button></nav>
+<div id="toast" role="status"></div>
+<dialog id="start-screen" aria-labelledby="start-title">
+<video id="menu-intro" preload="none" data-src="assets/mission-intro.mp4" muted playsinline aria-hidden="true"></video>
+<div class="menu-scrim" aria-hidden="true"></div>
+<button type="button" id="skip-intro" hidden>Skip intro <span aria-hidden="true">→</span></button>
+<div class="start-content"><span class="start-mark" aria-hidden="true">✦</span><p class="eyebrow">A SPACE ADVENTURE WITH PURPOSE</p><h1 id="start-title">Protect<br>our home.</h1><p class="start-description">Build a satellite. Meet your crew.<br>Help the Swat Valley prepare for rising water.</p><div class="start-actions"><button id="start-game" class="primary">Start game <span aria-hidden="true">→</span></button><button id="reset" hidden>New campaign</button><button id="fun-mode" onclick="location.href='fun-mode/index.html'">Fun Mode <span aria-hidden="true">↗</span></button><button id="start-help">How to play</button></div><p id="save-summary" class="save-summary">Your mission begins at the briefing office.</p><div class="start-controls"><span><kbd>WASD</kbd> Move</span><span><kbd>E</kbd> Talk</span><span><kbd>Q / R</kbd> Camera</span></div><p class="start-footer">Single player · Three story chapters · Ages 8–15</p></div>
+</dialog>
+<dialog id="panel"><button class="close" aria-label="Close dialogue">×</button><div id="panel-content"></div></dialog>
+<div id="cinematic" hidden><div><p class="eyebrow">FLIGHT DIRECTOR · HAMZA</p><h2>We have liftoff.</h2><p>One small satellite. A clearer picture for home.</p><button id="skip">Continue to orbit</button></div></div>
+<div id="fallback" hidden><h1>3D rendering is unavailable</h1><p>Open this game in Chrome or Edge with hardware acceleration enabled.</p></div>
+<script src="game.js"></script>
+</body></html>
